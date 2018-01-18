@@ -4,18 +4,45 @@
 #+date:   <2018-01-18 Thu>
 
 * Intro
-  troj-3e1c170dae4154581f7f37e20fcdd85ae39f2a98c7a2b1fdb153a2dfa5bae486 is a malicious ZIP archive
+  troj-3e1c170dae4154581f7f37e20fcdd85ae39f2a98c7a2b1fdb153a2dfa5bae486 (refered as
+  "the sample" for the rest of the document) is a malicious ZIP archive
   sent as an attachment in an email.
 
   Sadly i lost the original email, but it was litteraly asking the user to run the js file as 
   administrator.
 
-  When executed, troj-3e1c170dae4154581f7f37e20fcdd85ae39f2a98c7a2b1fdb153a2dfa5bae486 will try and
-  persist, gather information about the conputer its being ran on and enter a loop, making contact with
-  the C2 server to get instructions.
+  When executed, the sample will try and persist, gather information about the conputer its being 
+  ran on and enter a loop, making contact with the C2 server to get instructions.
   
-  troj-3e1c170dae4154581f7f37e20fcdd85ae39f2a98c7a2b1fdb153a2dfa5bae486 is able to execute scripts and
-  arbitraty javascript, self update and propapate itself through USB devices.
+  the sample is able to execute scripts and arbitraty javascript, self update and propapate itself 
+  through USB devices.
 
 * Mechanisms
+** Execution
+   Initially, the script needs to be extracted, then launched by the user. Later, by contacting the
+   c2 server, the sample will be able to download WScript files and javascript for aritrary execution 
+   with a WScipt.Shell object, the WScript executable or the =eval()= function
   
+** Persitence
+   Upon starting, the sample will try to read the registry key =HKCU\\vjw0rm=, the value will be either
+   TRUE, FALSE or the key will not exist and an exception will be raised. The catch block will set the 
+   key based on the position of the sample relative to the top of a directory.
+
+   #+begin_src js
+     try {
+         // shell.RegRead('HKCU\\vjw0rm')
+         // Reading registry key HKCU\\vjw0rm and storing it into isInTopDir. value is either TRUE or FALSE
+         isInTopDir = shell.RegRead(RegistryEntries[2]);
+     } catch(err) {
+         var sv = ScriptFullName.split("\\");
+         if (":\\" + sv[1] + "== :\\" + ScriptName) { // If script is in top dir (c:\, e:\, etc)
+             isInTopDir = "TRUE";
+             // Writing REG_SZ key HKCU\\vjw0rm with TRUE
+             shell.RegWrite(RegistryEntries[2],isInTopDir,RegistryEntries[5]);
+         } else {
+             isInTopDir = "FALSE";
+             // Writing REG_SZ key HKCU\\vjw0rm with FALSE
+             shell.RegWrite(RegistryEntries[2],isInTopDir,RegistryEntries[5]);
+         }
+     }
+   #+end_src
