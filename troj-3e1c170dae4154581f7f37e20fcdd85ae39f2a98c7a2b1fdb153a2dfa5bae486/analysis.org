@@ -1,0 +1,21 @@
+#+author: Arkeopix
+#+email:  jerome.mendiela@protonmail.ch
+#+title:  troj-3e1c170dae4154581f7f37e20fcdd85ae39f2a98c7a2b1fdb153a2dfa5bae486, analysis
+#+date:   <2018-01-18 Thu>
+
+* Intro
+  troj-3e1c170dae4154581f7f37e20fcdd85ae39f2a98c7a2b1fdb153a2dfa5bae486 is a malicious ZIP archive
+  sent as an attachment in an email.
+
+  Sadly i lost the original email, but it was litteraly asking the user to run the js file as 
+  administrator.
+
+  When executed, troj-3e1c170dae4154581f7f37e20fcdd85ae39f2a98c7a2b1fdb153a2dfa5bae486 will try and
+  persist, gather information about the conputer its being ran on and enter a loop, making contact with
+  the C2 server to get instructions.
+  
+  troj-3e1c170dae4154581f7f37e20fcdd85ae39f2a98c7a2b1fdb153a2dfa5bae486 is able to execute scripts and
+  arbitraty javascript, self update and propapate itself through USB devices.
+
+* Mechanisms
+  
