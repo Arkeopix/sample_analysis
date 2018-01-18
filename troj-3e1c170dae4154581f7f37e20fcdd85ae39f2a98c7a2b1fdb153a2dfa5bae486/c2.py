@@ -40,22 +40,25 @@ class Handler(BaseHTTPRequestHandler):
 
         def send_new_hdd_serial():
             return "Rn|V|some_string"
+
+        def send_new_script():
+            return "Up|V|SplitDelim='|U|';WScript.Echo('Hello');|V|new_script.js"
         
         dispatch = [
             send_exit,              # rep = Cl
             send_file,              # rep = Sc, file_content, file_name
             send_js,                # rep = Ex, js_code
             send_new_hdd_serial,    # rep = Rn, new_serial
-            # send_file_temp,         # rep = Up, file_content, file_name
+            send_new_script,        # rep = Up, file_content, file_name
             # send_format_str,        # rep = Un, format_string
             # send_script             # rep = RF, file_content, file_name
         ]
 
         print("contact from: " + self.headers['User-Agent'])
-        print(dispatch[3]())
+        print(dispatch[4]())
         self._set_headers()
         #self.wfile.write(dispatch[random.randint(0, 6)]())
-        self.wfile.write(dispatch[3]())
+        self.wfile.write(dispatch[4]())
         
 def run(server_class=HTTPServer, handler_class=Handler, port=1993):
     server_address = ('', port)
