@@ -189,7 +189,7 @@
      }
    #+end_src
    The response is then parsed and acted upon. The sample reponds to 7 commands from the C2.
-   - Cl\
+   - Cl\\
      Self termination. Upon receiving this message the sample will terminate itself
      #+begin_src js
        if (Response[0] === "Cl") {
