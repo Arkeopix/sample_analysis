@@ -1,6 +1,8 @@
 #!/usr/bin/env python
+# Naive implementatin of C2 server
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import random
+
 
 strobe = """
 @echo off
@@ -43,6 +45,12 @@ class Handler(BaseHTTPRequestHandler):
 
         def send_new_script():
             return "Up|V|SplitDelim='|U|';WScript.Echo('Hello');|V|new_script.js"
+
+        def send_format_str():
+            return "%f %n %sfdr %RgNe%"
+
+        def send_script():
+            return "RF|V|WScript.Echo('Hello')|V|script.js"
         
         dispatch = [
             send_exit,              # rep = Cl
@@ -50,15 +58,14 @@ class Handler(BaseHTTPRequestHandler):
             send_js,                # rep = Ex, js_code
             send_new_hdd_serial,    # rep = Rn, new_serial
             send_new_script,        # rep = Up, file_content, file_name
-            # send_format_str,        # rep = Un, format_string
-            # send_script             # rep = RF, file_content, file_name
+            send_format_str,        # rep = Un, format_string
+            send_script             # rep = RF, file_content, file_name
         ]
 
         print("contact from: " + self.headers['User-Agent'])
-        print(dispatch[4]())
+        print(dispatch[6]())
         self._set_headers()
-        #self.wfile.write(dispatch[random.randint(0, 6)]())
-        self.wfile.write(dispatch[4]())
+        self.wfile.write(dispatch[random.randint(0, 6)]())
         
 def run(server_class=HTTPServer, handler_class=Handler, port=1993):
     server_address = ('', port)
