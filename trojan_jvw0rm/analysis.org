@@ -3,6 +3,8 @@
 #+title:  vjw0rm, an analysis
 #+date:   <2018-01-18 Thu>
 
+#+TOC: tables
+
 * Intro
   vjw0rm might not be the sexiest malware out there, but it's still good enough to trick users into
   executing it. It offers a good example of malware behaviour and shows some techniques used by malware author
