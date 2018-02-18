@@ -278,9 +278,7 @@
 
 ** Propagation
    Everytime the sample tries to contact the C2, it also scan the instances of Win32_LogicalDisk
-   in order to find a USB device and copy itself on it. Actually, the =DriveType= property indicates
-   that the device has "no root directory", which i'm not sure about the exact meaning, however, usb devices seems
-   to fall in this category (based on some testing i've done), so i'm not completely out of touch.
+   in order to find a USB device and copy itself on it.
    The sample is copied with the =hidden= and =system= attributes, which means it is suposed to be invisible and cannot be deleted, 
    depending on the rights associated with the execution. Then, the sample scans the content of the root directory of the usb device 
    and will create an lnk file for each present file and folder. those lnk files are trying to look like the initial files on the device, 
